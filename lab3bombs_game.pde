@@ -1,88 +1,114 @@
 import processing.serial.*;
 import java.util.ArrayList;
 import gifAnimation.*;
+import ddf.minim.*;  // Import Minim audio library
 
-Serial myPort;        // 串口
-String inString = ""; // 接收到的串口数据
+Serial myPort;        // Serial port
+String inString = ""; // Received serial data
 
-// 玩家1的 GIF 动画
+// Audio management
+Minim minim;
+AudioPlayer startMusic;
+AudioPlayer bgMusic;
+AudioPlayer winMusic;
+AudioPlayer itemSound;
+AudioPlayer bombSound;
+
+// Background image
+PImage backgroundImage;
+
+// Player 1 GIF animations
 Gif player1UpGif;
 Gif player1DownGif;
 Gif player1LeftGif;
 Gif player1RightGif;
-Gif player1IdleGif;  // 可选：静止时的动画
+Gif player1IdleGif;  // Optional: idle animation
 
-// 玩家2的 GIF 动画
+// Player 2 GIF animations
 Gif player2UpGif;
 Gif player2DownGif;
 Gif player2LeftGif;
 Gif player2RightGif;
-Gif player2IdleGif;  // 可选：静止时的动画
+Gif player2IdleGif;  // Optional: idle animation
 
-// 炸弹的 GIF 动画
+// Bomb GIF animation
 Gif bombGif;
 
-// 星星的 GIF 动画
+// Star GIF animation
 Gif starGif;
 
-// 墙的图片
-PImage wallImg;
+// Wall images
+PImage[] wallImages = new PImage[5];
 
-// 飞鞋的 GIF 动画
+// Speed shoes GIF animation
 Gif speedShoesGif;
 
-// 游戏变量
+// Game variables
 float player1X = 100, player1Y = 100;
 float player2X = 700, player2Y = 500;
-float playerSize = 40; // 玩家大小
-int tileSize = 40;     // 地图网格大小
-boolean gameOver = false;     // 游戏结束标志
-boolean gameStarted = false;  // 游戏开始标志
-String winner = "";           // 胜利者记录
+float playerSize = 35; // Player size
+int tileSize = 40;     // Map grid size
+boolean gameOver = false;     // Game over flag
+boolean gameStarted = false;  // Game start flag
+String winner = "";           // Record of the winner
 
-ArrayList<Bomb> bombs = new ArrayList<Bomb>();         // 炸弹列表
-ArrayList<Block> blocks = new ArrayList<Block>();      // 方块列表
-ArrayList<Star> stars = new ArrayList<Star>();         // 星星列表
-ArrayList<SpeedShoes> speedShoesList = new ArrayList<SpeedShoes>(); // 飞鞋列表
+ArrayList<Bomb> bombs = new ArrayList<Bomb>();         // List of bombs
+ArrayList<Block> blocks = new ArrayList<Block>();      // List of blocks
+ArrayList<Star> stars = new ArrayList<Star>();         // List of stars
+ArrayList<SpeedShoes> speedShoesList = new ArrayList<SpeedShoes>(); // List of speed shoes
 
-// 玩家1属性
-int player1BombPower = 1; // 初始炸弹威力
-float player1Speed = 2;   // 玩家1移动速度
-int player1BombsAvailable = 3; // 玩家1可用的炸弹数量
+// Player 1 attributes
+int player1BombPower = 1; // Initial bomb power
+float player1Speed = 2;   // Player 1 movement speed
+int player1BombsAvailable = 3; // Number of bombs available to Player 1
 
-// 玩家2属性
-int player2BombPower = 1; // 初始炸弹威力
-float player2Speed = 2;   // 玩家2移动速度
-int player2BombsAvailable = 3; // 玩家2可用的炸弹数量
+// Player 2 attributes
+int player2BombPower = 1; // Initial bomb power
+float player2Speed = 2;   // Player 2 movement speed
+int player2BombsAvailable = 3; // Number of bombs available to Player 2
 
-// 移动标志变量
+// Movement flag variables
 boolean p1Up, p1Down, p1Left, p1Right;
 boolean p2Up, p2Down, p2Left, p2Right;
 
-// 玩家移动方向
-String player1Direction = "down"; // 初始方向
+// Player movement direction
+String player1Direction = "down"; // Initial direction
 String player2Direction = "down";
 
-// 死亡处理变量
+// Death handling variables
 boolean player1Dead = false;
 boolean player2Dead = false;
-int gameOverDelay = 180; // 玩家死亡后延迟3秒再结束游戏
+int gameOverDelay = 180; // Delay of 3 seconds after player death before ending the game
 
 void setup() {
   size(800, 600);
   
-  // 初始化串口通信
-  println(Serial.list()); // 打印可用的串口
-  String portName = Serial.list()[0]; // 根据您的系统调整索引
+  // Initialize background image
+  backgroundImage = loadImage("bg.png");
+  
+  // Initialize serial communication
+  println(Serial.list()); // Print available serial ports
+  String portName = Serial.list()[0]; // Adjust the index based on your system
   myPort = new Serial(this, portName, 115200);
-  myPort.clear(); // 清除串口缓冲区
+  myPort.clear(); // Clear serial buffer
 
-  // 加载玩家1的 GIF 动画
+  // Initialize audio
+  minim = new Minim(this);
+  startMusic = minim.loadFile("start.wav");
+  bgMusic = minim.loadFile("bg.wav");
+  winMusic = minim.loadFile("win.wav");
+  itemSound = minim.loadFile("item.wav");
+  bombSound = minim.loadFile("bomb.wav");
+
+  // Play start music
+  startMusic.play();
+
+  // Load Player 1 GIF animations
   player1UpGif = new Gif(this, "fengw.gif");
   player1DownGif = new Gif(this, "fengs.gif");
   player1LeftGif = new Gif(this, "fenga.gif");
   player1RightGif = new Gif(this, "fengd.gif");
-  player1IdleGif = new Gif(this, "fengs.gif"); // 可选
+  player1IdleGif = new Gif(this, "fengs.gif"); // Optional
 
   player1UpGif.play();
   player1DownGif.play();
@@ -90,12 +116,12 @@ void setup() {
   player1RightGif.play();
   player1IdleGif.play();
 
-  // 加载玩家2的 GIF 动画
+  // Load Player 2 GIF animations
   player2UpGif = new Gif(this, "paow.gif");
   player2DownGif = new Gif(this, "paos.gif");
   player2LeftGif = new Gif(this, "paoa.gif");
   player2RightGif = new Gif(this, "paod.gif");
-  player2IdleGif = new Gif(this, "paotu.gif"); // 可选
+  player2IdleGif = new Gif(this, "paotu.gif"); // Optional
 
   player2UpGif.play();
   player2DownGif.play();
@@ -103,53 +129,59 @@ void setup() {
   player2RightGif.play();
   player2IdleGif.play();
 
-  // 加载炸弹的 GIF 动画
+  // Load bomb GIF animation
   bombGif = new Gif(this, "bomb.gif");
   bombGif.play();
 
-  // 加载星星的 GIF 动画
+  // Load star GIF animation
   starGif = new Gif(this, "star.gif");
   starGif.play();
 
-  // 加载墙的图片
-  wallImg = loadImage("wall.png");
+  // Load wall images
+  for (int i = 0; i < 5; i++) {
+    wallImages[i] = loadImage("wall" + (i+1) + ".png");
+  }
 
-  // 加载飞鞋的 GIF 动画
+  // Load speed shoes GIF animation
   speedShoesGif = new Gif(this, "speed_shoes.gif");
   speedShoesGif.play();
 
-  // 初始化地图上的方块、星星和飞鞋
+  // Initialize blocks, stars, and speed shoes on the map
   initBlocks();
   initStars();
   initSpeedShoes();
 }
 
 void draw() {
-  background(51, 252, 255);
+  // Draw background image
+  image(backgroundImage, 0, 0, width, height);
   
   if (!gameStarted) {
     drawStartButton();
   } else if (gameOver) {
     gameOverDelay--;
     if (gameOverDelay <= 0) {
-      // 显示胜利者和重置按钮
+      // Display winner and reset button
       drawRestartButton();
       fill(0);
       textSize(32);
       textAlign(CENTER);
       text(winner + " Wins!", width / 2, height / 2);
     } else {
-      // 在游戏结束前绘制死亡动画
+      // Draw death animation
       drawDeathAnimation();
     }
   } else {
-    updatePlayerPositions(); // 更新玩家位置
-    checkStarCollisions();   // 检查与星星的碰撞
-    checkSpeedShoesCollisions(); // 检查与飞鞋的碰撞
+    if (!bgMusic.isPlaying()) {
+      bgMusic.loop();  // Start background music
+    }
+    updatePlayerPositions(); // Update player positions
+    checkStarCollisions();   // Check collisions with stars
+    checkSpeedShoesCollisions(); // Check collisions with speed shoes
     drawGame();
   }
 
-  // 检查串口输入
+  // Check serial input
   while (myPort.available() > 0) {
     inString = myPort.readStringUntil('\n');
     if (inString != null) {
@@ -159,7 +191,7 @@ void draw() {
   }
 }
 
-// 处理来自 Arduino 的串口输入
+// Handle input from Arduino
 void handleInput(String input) {
   if (input.equals("UP_PRESS")) {
     p1Up = true;
@@ -178,15 +210,15 @@ void handleInput(String input) {
   } else if (input.equals("RIGHT_RELEASE")) {
     p1Right = false;
   } else if (input.equals("BOMB_PRESS")) {
-    // 放置炸弹
-    placeBomb(1); // 玩家1放置炸弹
+    // Place bomb
+    placeBomb(1); // Player 1 places a bomb
   }
 }
 
-// 初始化方块
+// Initialize blocks
 void initBlocks() {
   blocks.clear();
-  int numberOfBlocks = 50; // 根据需要设置墙壁数量
+  int numberOfBlocks = 50; // Set the number of walls as needed
   for (int i = 0; i < numberOfBlocks; i++) {
     float x, y;
     int attempts = 0;
@@ -194,17 +226,19 @@ void initBlocks() {
       x = floor(random(width / tileSize)) * tileSize;
       y = floor(random(height / tileSize)) * tileSize;
       attempts++;
-      if (attempts > 1000) break; // 防止死循环
+      if (attempts > 1000) break; // Prevent infinite loop
     } while (!isOutsidePlayerArea(x, y, player1X, player1Y, 3) ||
              !isOutsidePlayerArea(x, y, player2X, player2Y, 3));
-    blocks.add(new Block(x, y, tileSize, tileSize, true));
+    // Assign a random wall image to each block
+    PImage randomWallImage = wallImages[(int)random(wallImages.length)];
+    blocks.add(new Block(x, y, tileSize, tileSize, true, randomWallImage));
   }
 }
 
-// 初始化星星
+// Initialize stars
 void initStars() {
   stars.clear();
-  int numberOfStars = 5; // 根据需要设置星星数量
+  int numberOfStars = 5; // Set the number of stars as needed
   for (int i = 0; i < numberOfStars; i++) {
     float x, y;
     int attempts = 0;
@@ -212,17 +246,17 @@ void initStars() {
       x = floor(random(width / tileSize)) * tileSize;
       y = floor(random(height / tileSize)) * tileSize;
       attempts++;
-      if (attempts > 1000) break; // 防止死循环
+      if (attempts > 1000) break; // Prevent infinite loop
     } while (!isOutsidePlayerArea(x, y, player1X, player1Y, 3) ||
              !isOutsidePlayerArea(x, y, player2X, player2Y, 3));
     stars.add(new Star(x, y));
   }
 }
 
-// 初始化飞鞋
+// Initialize speed shoes
 void initSpeedShoes() {
   speedShoesList.clear();
-  int numberOfShoes = 3; // 根据需要设置飞鞋数量
+  int numberOfShoes = 3; // Set the number of speed shoes as needed
   for (int i = 0; i < numberOfShoes; i++) {
     float x, y;
     int attempts = 0;
@@ -230,14 +264,14 @@ void initSpeedShoes() {
       x = floor(random(width / tileSize)) * tileSize;
       y = floor(random(height / tileSize)) * tileSize;
       attempts++;
-      if (attempts > 1000) break; // 防止死循环
+      if (attempts > 1000) break; // Prevent infinite loop
     } while (!isOutsidePlayerArea(x, y, player1X, player1Y, 3) ||
              !isOutsidePlayerArea(x, y, player2X, player2Y, 3));
     speedShoesList.add(new SpeedShoes(x, y));
   }
 }
 
-// 判断位置是否在玩家范围之外
+// Determine if the position is outside the player's area
 boolean isOutsidePlayerArea(float x, float y, float playerX, float playerY, int range) {
   int playerTileX = (int)(playerX / tileSize);
   int playerTileY = (int)(playerY / tileSize);
@@ -248,7 +282,7 @@ boolean isOutsidePlayerArea(float x, float y, float playerX, float playerY, int 
   return dx >= range || dy >= range;
 }
 
-// 更新玩家位置
+// Update player positions
 void updatePlayerPositions() {
   if (!player1Dead) {
     float newPlayer1X = player1X;
@@ -305,7 +339,7 @@ void updatePlayerPositions() {
   }
 }
 
-// 检查玩家是否与方块碰撞
+// Check if player is colliding with blocks
 boolean isCollidingWithBlocks(float px, float py) {
   for (Block block : blocks) {
     if (!block.destroyed && block.collides(px, py, playerSize)) {
@@ -315,75 +349,83 @@ boolean isCollidingWithBlocks(float px, float py) {
   return false;
 }
 
-// 检查与星星的碰撞
+// Check collisions with stars
 void checkStarCollisions() {
-  // 玩家1
+  // Player 1
   for (int i = stars.size() - 1; i >= 0; i--) {
     Star s = stars.get(i);
     if (s.isCollected(player1X, player1Y, playerSize)) {
       stars.remove(i);
-      player1BombPower = min(player1BombPower + 1, 5); // 增加玩家1的炸弹威力，最大为5
+      player1BombPower = min(player1BombPower + 1, 5); // Increase Player 1's bomb power, max 5
+      itemSound.rewind();
+      itemSound.play(); // Play item sound effect
     }
   }
-  // 玩家2
+  // Player 2
   for (int i = stars.size() - 1; i >= 0; i--) {
     Star s = stars.get(i);
     if (s.isCollected(player2X, player2Y, playerSize)) {
       stars.remove(i);
-      player2BombPower = min(player2BombPower + 1, 5); // 增加玩家2的炸弹威力，最大为5
+      player2BombPower = min(player2BombPower + 1, 5); // Increase Player 2's bomb power, max 5
+      itemSound.rewind();
+      itemSound.play(); // Play item sound effect
     }
   }
 }
 
-// 检查与飞鞋的碰撞
+// Check collisions with speed shoes
 void checkSpeedShoesCollisions() {
-  // 玩家1
+  // Player 1
   for (int i = speedShoesList.size() - 1; i >= 0; i--) {
     SpeedShoes s = speedShoesList.get(i);
     if (s.isCollected(player1X, player1Y, playerSize)) {
       speedShoesList.remove(i);
-      player1Speed += 0.5; // 增加玩家1的移动速度
+      player1Speed += 0.5; // Increase Player 1's movement speed
+      itemSound.rewind();
+      itemSound.play(); // Play item sound effect
     }
   }
-  // 玩家2
+  // Player 2
   for (int i = speedShoesList.size() - 1; i >= 0; i--) {
     SpeedShoes s = speedShoesList.get(i);
     if (s.isCollected(player2X, player2Y, playerSize)) {
       speedShoesList.remove(i);
-      player2Speed += 0.5; // 增加玩家2的移动速度
+      player2Speed += 0.5; // Increase Player 2's movement speed
+      itemSound.rewind();
+      itemSound.play(); // Play item sound effect
     }
   }
 }
 
-// 绘制游戏场景
+// Draw the game scene
 void drawGame() {
-  // 绘制方块
+  // Draw blocks
   for (Block block : blocks) {
     if (!block.destroyed) {
       block.display();
     }
   }
 
-  // 绘制星星
+  // Draw stars
   for (Star star : stars) {
     star.display();
   }
 
-  // 绘制飞鞋
+  // Draw speed shoes
   for (SpeedShoes shoes : speedShoesList) {
     shoes.display();
   }
 
-  // 绘制炸弹
+  // Draw bombs
   for (int i = bombs.size() - 1; i >= 0; i--) {
     Bomb b = bombs.get(i);
     b.update();
     b.display();
 
-    // 检查炸弹是否完成
+    // Check if bomb is finished
     if (b.isFinished()) {
       bombs.remove(i);
-      // 恢复玩家的炸弹数量
+      // Restore player's bomb count
       if (b.owner == 1) {
         player1BombsAvailable = min(player1BombsAvailable + 1, 3);
       } else if (b.owner == 2) {
@@ -392,7 +434,7 @@ void drawGame() {
     }
   }
 
-  // 绘制玩家1
+  // Draw Player 1
   if (!player1Dead) {
     Gif currentGif;
     switch (player1Direction) {
@@ -415,7 +457,7 @@ void drawGame() {
     image(currentGif, player1X - playerSize / 2, player1Y - playerSize / 2, playerSize, playerSize);
   }
 
-  // 绘制玩家2
+  // Draw Player 2
   if (!player2Dead) {
     Gif currentGif;
     switch (player2Direction) {
@@ -438,35 +480,44 @@ void drawGame() {
     image(currentGif, player2X - playerSize / 2, player2Y - playerSize / 2, playerSize, playerSize);
   }
 
-  // 检查炸弹对玩家的影响
+  // Check bomb effects on players
   for (Bomb b : bombs) {
     if (b.exploded) {
       if (b.isPlayerHit(player1X, player1Y) && !player1Dead) {
-        winner = "Player 2"; // 玩家1被击中，玩家2胜利
+        winner = "Player 2"; // Player 1 is hit, Player 2 wins
         player1Dead = true;
         gameOver = true;
+        handleWin();
       }
       if (b.isPlayerHit(player2X, player2Y) && !player2Dead) {
-        winner = "Player 1"; // 玩家2被击中，玩家1胜利
+        winner = "Player 1"; // Player 2 is hit, Player 1 wins
         player2Dead = true;
         gameOver = true;
+        handleWin();
       }
     }
   }
 
-  // 限制玩家移动在屏幕内
+  // Constrain player movement within the screen
   player1X = constrain(player1X, playerSize / 2, width - playerSize / 2);
   player1Y = constrain(player1Y, playerSize / 2, height - playerSize / 2);
   player2X = constrain(player2X, playerSize / 2, width - playerSize / 2);
   player2Y = constrain(player2Y, playerSize / 2, height - playerSize / 2);
 }
 
-// 绘制死亡动画
+// Handle victory music
+void handleWin() {
+  bgMusic.pause(); // Pause background music
+  winMusic.rewind();
+  winMusic.play(); // Play victory music
+}
+
+// Draw death animation
 void drawDeathAnimation() {
   if (player1Dead) {
-    tint(255, 100); // 设置透明度
+    tint(255, 100); // Set transparency
     image(player1DownGif, player1X - playerSize / 2, player1Y - playerSize / 2, playerSize, playerSize);
-    noTint(); // 重置透明度
+    noTint(); // Reset transparency
   }
   if (player2Dead) {
     tint(255, 100);
@@ -475,7 +526,7 @@ void drawDeathAnimation() {
   }
 }
 
-// 绘制开始按钮
+// Draw start button
 void drawStartButton() {
   fill(0, 200, 0);
   rect(width / 2 - 50, height / 2 - 25, 100, 50);
@@ -485,7 +536,7 @@ void drawStartButton() {
   text("Start", width / 2, height / 2);
 }
 
-// 绘制重启按钮
+// Draw restart button
 void drawRestartButton() {
   fill(200, 0, 0);
   rect(width / 2 - 50, height / 2 + 50, 100, 50);
@@ -495,23 +546,25 @@ void drawRestartButton() {
   text("Restart", width / 2, height / 2 + 75);
 }
 
-// 鼠标点击事件
+// Mouse click event
 void mousePressed() {
   if (!gameStarted) {
-    // 点击开始按钮
+    // Click start button
     if (mouseX > width / 2 - 50 && mouseX < width / 2 + 50 && mouseY > height / 2 - 25 && mouseY < height / 2 + 25) {
       gameStarted = true;
       gameOver = false;
+      startMusic.rewind();
+      startMusic.play(); // Play start music
     }
   } else if (gameOver && gameOverDelay <= 0) {
-    // 点击重启按钮
+    // Click restart button
     if (mouseX > width / 2 - 50 && mouseX < width / 2 + 50 && mouseY > height / 2 + 50 && mouseY < height / 2 + 100) {
       resetGame();
     }
   }
 }
 
-// 重置游戏
+// Reset the game
 void resetGame() {
   gameStarted = true;
   gameOver = false;
@@ -519,29 +572,32 @@ void resetGame() {
   bombs.clear();
   stars.clear();
   speedShoesList.clear();
-  initStars();   // 重新初始化星星
-  initBlocks();  // 重新初始化方块
-  initSpeedShoes(); // 重新初始化飞鞋
+  initStars();   // Re-initialize stars
+  initBlocks();  // Re-initialize blocks
+  initSpeedShoes(); // Re-initialize speed shoes
   player1X = 100;
   player1Y = 100;
   player2X = 700;
   player2Y = 500;
-  player1BombPower = 1; // 重置玩家1的炸弹威力
-  player2BombPower = 1; // 重置玩家2的炸弹威力
-  player1Speed = 2;     // 重置玩家1的速度
-  player2Speed = 2;     // 重置玩家2的速度
-  player1BombsAvailable = 3; // 重置玩家1的炸弹数量
-  player2BombsAvailable = 3; // 重置玩家2的炸弹数量
+  player1BombPower = 1; // Reset Player 1's bomb power
+  player2BombPower = 1; // Reset Player 2's bomb power
+  player1Speed = 2;     // Reset Player 1's speed
+  player2Speed = 2;     // Reset Player 2's speed
+  player1BombsAvailable = 3; // Reset Player 1's bomb count
+  player2BombsAvailable = 3; // Reset Player 2's bomb count
   player1Dead = false;
   player2Dead = false;
-  gameOverDelay = 180; // 重置游戏结束延迟
-  player1Direction = "down"; // 重置玩家方向
+  gameOverDelay = 180; // Reset game over delay
+  player1Direction = "down"; // Reset player directions
   player2Direction = "down";
+  bgMusic.rewind();
+  bgMusic.loop(); // Replay background music
+  winMusic.pause(); // Stop victory music
 }
 
-// 键盘按下事件
+// Key press event
 void keyPressed() {
-  // 玩家1控制（用于没有 Arduino 时的测试）
+  // Player 1 controls (for testing without Arduino)
   if (key == 'w') {
     p1Up = true;
     player1Direction = "up";
@@ -559,10 +615,10 @@ void keyPressed() {
     player1Direction = "right";
   }
   if (key == 'f') {
-    placeBomb(1); // 玩家1放置炸弹
+    placeBomb(1); // Player 1 places a bomb
   }
 
-  // 玩家2控制（方向键 + Enter）
+  // Player 2 controls (arrow keys + Enter)
   if (keyCode == UP) {
     p2Up = true;
     player2Direction = "up";
@@ -580,44 +636,44 @@ void keyPressed() {
     player2Direction = "right";
   }
   if (keyCode == ENTER) {
-    placeBomb(2); // 玩家2放置炸弹
+    placeBomb(2); // Player 2 places a bomb
   }
 }
 
-// 键盘释放事件
+// Key release event
 void keyReleased() {
-  // 玩家1（用于没有 Arduino 时的测试）
+  // Player 1 (for testing without Arduino)
   if (key == 'w') p1Up = false;
   if (key == 's') p1Down = false;
   if (key == 'a') p1Left = false;
   if (key == 'd') p1Right = false;
 
-  // 玩家2
+  // Player 2
   if (keyCode == UP) p2Up = false;
   if (keyCode == DOWN) p2Down = false;
   if (keyCode == LEFT) p2Left = false;
   if (keyCode == RIGHT) p2Right = false;
 }
 
-// 放置炸弹函数
+// Function to place a bomb
 void placeBomb(int player) {
   if (player == 1 && player1BombsAvailable > 0) {
-    bombs.add(new Bomb(player1X, player1Y, player1BombPower, 1)); // 玩家1放置炸弹
+    bombs.add(new Bomb(player1X, player1Y, player1BombPower, 1)); // Player 1 places a bomb
     player1BombsAvailable--;
   } else if (player == 2 && player2BombsAvailable > 0) {
-    bombs.add(new Bomb(player2X, player2Y, player2BombPower, 2)); // 玩家2放置炸弹
+    bombs.add(new Bomb(player2X, player2Y, player2BombPower, 2)); // Player 2 places a bomb
     player2BombsAvailable--;
   }
 }
 
-// 炸弹类
+// Bomb class
 class Bomb {
   float x, y;
-  int timer = 180; // 3秒倒计时（60帧/秒）
+  int timer = 180; // 3-second countdown (60 frames per second)
   boolean exploded = false;
   ArrayList<Explosion> explosions = new ArrayList<Explosion>();
-  int power; // 炸弹威力
-  int owner; // 炸弹的所属玩家，1 或 2
+  int power; // Bomb power
+  int owner; // Bomb owner, 1 or 2
 
   Bomb(float x, float y, int power, int owner) {
     this.x = floor(x / tileSize) * tileSize + tileSize / 2;
@@ -632,9 +688,11 @@ class Bomb {
       if (timer <= 0) {
         exploded = true;
         createExplosions();
+        bombSound.rewind();
+        bombSound.play(); // Play bomb explosion sound
       }
     } else {
-      // 更新爆炸的持续时间
+      // Update explosion duration
       for (int i = explosions.size() - 1; i >= 0; i--) {
         Explosion exp = explosions.get(i);
         exp.update();
@@ -656,13 +714,13 @@ class Bomb {
   }
 
   void createExplosions() {
-    explosions.add(new Explosion(x, y)); // 中心爆炸
+    explosions.add(new Explosion(x, y)); // Center explosion
     for (int dir = 0; dir < 4; dir++) {
       int dx = 0, dy = 0;
-      if (dir == 0) dy = -1; // 上
-      if (dir == 1) dy = 1;  // 下
-      if (dir == 2) dx = -1; // 左
-      if (dir == 3) dx = 1;  // 右
+      if (dir == 0) dy = -1; // Up
+      if (dir == 1) dy = 1;  // Down
+      if (dir == 2) dx = -1; // Left
+      if (dir == 3) dx = 1;  // Right
       for (int i = 1; i <= power; i++) {
         float nx = x + dx * i * tileSize;
         float ny = y + dy * i * tileSize;
@@ -691,16 +749,16 @@ class Bomb {
     return false;
   }
 
-  // 检查所有爆炸是否结束
+  // Check if all explosions are finished
   boolean isFinished() {
     return exploded && explosions.isEmpty();
   }
 }
 
-// 爆炸类
+// Explosion class
 class Explosion {
   float x, y;
-  int duration = 30; // 爆炸持续时间
+  int duration = 30; // Explosion duration
 
   Explosion(float x, float y) {
     this.x = x;
@@ -729,23 +787,25 @@ class Explosion {
   }
 }
 
-// 方块类
+// Block class
 class Block {
   float x, y;
   float width, height;
-  boolean destructible; // 是否可被破坏
-  boolean destroyed = false; // 是否已被破坏
+  boolean destructible; // Whether the block can be destroyed
+  boolean destroyed = false; // Whether the block has been destroyed
+  PImage img; // Image of the block
 
-  Block(float x, float y, float width, float height, boolean destructible) {
+  Block(float x, float y, float width, float height, boolean destructible, PImage img) {
     this.x = x;
     this.y = y;
     this.width = width;
     this.height = height;
     this.destructible = destructible;
+    this.img = img;
   }
 
   void display() {
-    image(wallImg, x, y, width, height); // 绘制墙的图片
+    image(img, x, y, width, height); // Draw the block image
   }
 
   boolean collides(float px, float py, float size) {
@@ -758,10 +818,10 @@ class Block {
   }
 }
 
-// 星星类
+// Star class
 class Star {
   float x, y;
-  float size = 30; // 星星大小
+  float size = 30; // Star size
 
   Star(float x, float y) {
     this.x = x + tileSize / 2;
@@ -772,17 +832,17 @@ class Star {
     image(starGif, x - size / 2, y - size / 2, size, size);
   }
 
-  // 检查玩家是否收集到星星
+  // Check if player has collected the star
   boolean isCollected(float px, float py, float playerSize) {
     float distance = dist(px, py, x, y);
     return distance < (size / 2 + playerSize / 2);
   }
 }
 
-// 飞鞋类
+// SpeedShoes class
 class SpeedShoes {
   float x, y;
-  float size = 30; // 飞鞋大小
+  float size = 30; // Speed shoes size
 
   SpeedShoes(float x, float y) {
     this.x = x + tileSize / 2;
@@ -793,7 +853,7 @@ class SpeedShoes {
     image(speedShoesGif, x - size / 2, y - size / 2, size, size);
   }
 
-  // 检查玩家是否收集到飞鞋
+  // Check if player has collected the speed shoes
   boolean isCollected(float px, float py, float playerSize) {
     float distance = dist(px, py, x, y);
     return distance < (size / 2 + playerSize / 2);
