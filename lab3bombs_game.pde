@@ -13,9 +13,21 @@ AudioPlayer bgMusic;
 AudioPlayer winMusic;
 AudioPlayer itemSound;
 AudioPlayer bombSound;
-
+AudioPlayer selctionSound;
 // Background image
 PImage backgroundImage;
+
+// Character selection variables
+int selectedCharacterP1 = -1; // Player 1 selected character (-1 means not selected)
+int selectedCharacterP2 = -1; // Player 2 selected character (-1 means not selected)
+boolean characterSelectionDone = false; // Flag to check if character selection is completed
+
+// Character attributes
+String[] characterNames = {"Arian", "Damon", "Rema", "Julia"}; // Names of the characters
+PImage[] characterIcons = new PImage[4]; // Icons for character selection
+Gif[][] characterGifs = new Gif[4][5];   // GIFs for each character (4 characters, 5 GIFs: up, down, left, right, idle)
+float[] characterSpeeds = {2.0, 2.5, 2.0, 3.0};  // Speed of each character
+int[] characterBombPowers = {1, 1, 2, 3};         // Bomb power of each character
 
 // Player 1 GIF animations
 Gif player1UpGif;
@@ -99,35 +111,9 @@ void setup() {
   winMusic = minim.loadFile("win.wav");
   itemSound = minim.loadFile("item.wav");
   bombSound = minim.loadFile("bomb.wav");
+  selctionSound = minim.loadFile("DIY.wav");
 
-  // Play start music
-  startMusic.play();
 
-  // Load Player 1 GIF animations
-  player1UpGif = new Gif(this, "fengw.gif");
-  player1DownGif = new Gif(this, "fengs.gif");
-  player1LeftGif = new Gif(this, "fenga.gif");
-  player1RightGif = new Gif(this, "fengd.gif");
-  player1IdleGif = new Gif(this, "fengs.gif"); // Optional
-
-  player1UpGif.play();
-  player1DownGif.play();
-  player1LeftGif.play();
-  player1RightGif.play();
-  player1IdleGif.play();
-
-  // Load Player 2 GIF animations
-  player2UpGif = new Gif(this, "paow.gif");
-  player2DownGif = new Gif(this, "paos.gif");
-  player2LeftGif = new Gif(this, "paoa.gif");
-  player2RightGif = new Gif(this, "paod.gif");
-  player2IdleGif = new Gif(this, "paotu.gif"); // Optional
-
-  player2UpGif.play();
-  player2DownGif.play();
-  player2LeftGif.play();
-  player2RightGif.play();
-  player2IdleGif.play();
 
   // Load bomb GIF animation
   bombGif = new Gif(this, "bomb.gif");
@@ -146,6 +132,29 @@ void setup() {
   speedShoesGif = new Gif(this, "speed_shoes.gif");
   speedShoesGif.play();
 
+  // Load character icons for selection screen
+  for (int i = 0; i < 4; i++) {
+    characterIcons[i] = loadImage("char" + (i + 1) + "_down.gif"); // character1.png, character2.png, etc.
+  }
+
+  // Load character GIFs
+  for (int i = 0; i < 4; i++) {
+    characterGifs[i][0] = new Gif(this, "char" + (i + 1) + "_up.gif");
+    println("Loaded char" + (i + 1) + "_up.gif: " + (characterGifs[i][0] != null));
+    characterGifs[i][1] = new Gif(this, "char" + (i + 1) + "_down.gif");
+    println("Loaded char" + (i + 1) + "_down.gif: " + (characterGifs[i][0] != null));
+    characterGifs[i][2] = new Gif(this, "char" + (i + 1) + "_left.gif");
+    println("Loaded char" + (i + 1) + "_left.gif: " + (characterGifs[i][0] != null));
+    characterGifs[i][3] = new Gif(this, "char" + (i + 1) + "_right.gif");
+    println("Loaded char" + (i + 1) + "_right.gif: " + (characterGifs[i][0] != null));
+    characterGifs[i][4] = new Gif(this, "char" + (i + 1) + "_idle.gif");
+    println("Loaded char" + (i + 1) + "_idle.gif: " + (characterGifs[i][0] != null));
+
+    for (int j = 0; j < 5; j++) {
+      characterGifs[i][j].play();
+    }
+  }
+
   // Initialize blocks, stars, and speed shoes on the map
   initBlocks();
   initStars();
@@ -153,42 +162,420 @@ void setup() {
 }
 
 void draw() {
-  // Draw background image
-  image(backgroundImage, 0, 0, width, height);
-  
-  if (!gameStarted) {
-    drawStartButton();
-  } else if (gameOver) {
-    gameOverDelay--;
-    if (gameOverDelay <= 0) {
-      // Display winner and reset button
-      drawRestartButton();
-      fill(0);
-      textSize(32);
-      textAlign(CENTER);
-      text(winner + " Wins!", width / 2, height / 2);
-    } else {
-      // Draw death animation
-      drawDeathAnimation();
-    }
+  if (!characterSelectionDone) {
+    drawCharacterSelection();
   } else {
-    if (!bgMusic.isPlaying()) {
-      bgMusic.loop();  // Start background music
+    // Draw background image
+    image(backgroundImage, 0, 0, width, height);
+    
+    if (!gameStarted) {
+      drawStartButton();
+    } else if (gameOver) {
+      gameOverDelay--;
+      if (gameOverDelay <= 0) {
+        // Display winner and reset button
+        drawRestartButton();
+        fill(0);
+        textSize(32);
+        textAlign(CENTER);
+        text(winner + " Wins!", width / 2, height / 2);
+      } else {
+        // Draw death animation
+        drawDeathAnimation();
+      }
+    } else {
+      if (!bgMusic.isPlaying()) {
+        bgMusic.loop();  // Start background music
+      }
+      updatePlayerPositions(); // Update player positions
+      checkStarCollisions();   // Check collisions with stars
+      checkSpeedShoesCollisions(); // Check collisions with speed shoes
+      drawGame();
     }
-    updatePlayerPositions(); // Update player positions
-    checkStarCollisions();   // Check collisions with stars
-    checkSpeedShoesCollisions(); // Check collisions with speed shoes
-    drawGame();
+
+    // Check serial input
+    while (myPort.available() > 0) {
+      inString = myPort.readStringUntil('\n');
+      if (inString != null) {
+        inString = trim(inString);
+        handleInput(inString);
+      }
+    }
+  }
+}
+
+// Draw the character selection screen
+void drawCharacterSelection() {
+  background(200, 200, 255); // Light blue background for character selection
+  if (!selctionSound.isPlaying()) {
+    selctionSound.loop(); 
+  }
+  textAlign(CENTER);
+  textSize(24);
+  fill(0);
+  text("Player 1: Select Your Character", width / 2, 50);
+  text("Player 2: Select Your Character", width / 2, 350);
+  
+  // Draw character icons for selection
+  for (int i = 0; i < 4; i++) {
+    // Player 1 character selection
+    image(characterIcons[i], 100 + i * 150, 80, 100, 100);
+    text(characterNames[i], 150 + i * 150, 200); // Display character name
+
+    // Player 2 character selection
+    image(characterIcons[i], 100 + i * 150, 380, 100, 100);
+    text(characterNames[i], 150 + i * 150, 500); // Display character name
+    
+    // Highlight selected character for Player 1
+    if (selectedCharacterP1 == i) {
+      stroke(255, 0, 0); // Red border
+      noFill();
+      rect(100 + i * 150, 80, 100, 100);
+      noStroke();
+    }
+    
+    // Highlight selected character for Player 2
+    if (selectedCharacterP2 == i) {
+      stroke(0, 0, 255); // Blue border
+      noFill();
+      rect(100 + i * 150, 380, 100, 100);
+      noStroke();
+    }
   }
 
-  // Check serial input
-  while (myPort.available() > 0) {
-    inString = myPort.readStringUntil('\n');
-    if (inString != null) {
-      inString = trim(inString);
-      handleInput(inString);
+  // Check if both players have selected characters
+  if (selectedCharacterP1 != -1 && selectedCharacterP2 != -1) {
+    fill(0);
+    textSize(32);
+    text("Press ENTER to start!", width / 2, height - 50);
+  }
+}
+
+// Mouse click event for character selection
+void mousePressedCharacterSelection() {
+  // Player 1 character selection
+  for (int i = 0; i < 4; i++) {
+    if (mouseX > 100 + i * 150 && mouseX < 100 + i * 150 + 100 && mouseY > 80 && mouseY < 180) {
+      selectedCharacterP1 = i;
+      itemSound.rewind();
+      itemSound.play();
+    }
+    // Player 2 character selection
+    if (mouseX > 100 + i * 150 && mouseX < 100 + i * 150 + 100 && mouseY > 380 && mouseY < 480) {
+      selectedCharacterP2 = i;
+      itemSound.rewind(); 
+      itemSound.play();
     }
   }
+}
+
+// Main mousePressed event
+void mousePressed() {
+  if (!characterSelectionDone) {
+    mousePressedCharacterSelection(); // Character selection mouse press
+  } else {
+    mousePressedGame(); // Game mouse press
+  }
+}
+
+// Mouse click event during the game
+void mousePressedGame() {
+  if (!gameStarted) {
+    // Click start button
+    if (mouseX > width / 2 - 50 && mouseX < width / 2 + 50 && mouseY > height / 2 - 25 && mouseY < height / 2 + 25) {
+      gameStarted = true;
+      gameOver = false;
+      startMusic.rewind();
+      startMusic.play(); // Play start music
+    }
+  } else if (gameOver && gameOverDelay <= 0) {
+    // Click restart button
+    if (mouseX > width / 2 - 50 && mouseX < width / 2 + 50 && mouseY > height / 2 + 50 && mouseY < height / 2 + 100) {
+      resetGame();
+    }
+  }
+}
+
+// Key press event
+void keyPressed() {
+  if (!characterSelectionDone) {
+    if (selectedCharacterP1 != -1 && selectedCharacterP2 != -1 && keyCode == ENTER) {
+      characterSelectionDone = true;
+      selctionSound.pause();
+      initializePlayerAttributes(); // Set attributes for both players based on selection
+    }
+  } else {
+    // Player 1 controls (for testing without Arduino)
+    if (key == 'w') {
+      p1Up = true;
+      player1Direction = "up";
+    }
+    if (key == 's') {
+      p1Down = true;
+      player1Direction = "down";
+    }
+    if (key == 'a') {
+      p1Left = true;
+      player1Direction = "left";
+    }
+    if (key == 'd') {
+      p1Right = true;
+      player1Direction = "right";
+    }
+    if (key == 'f') {
+      placeBomb(1); // Player 1 places a bomb
+    }
+
+    // Player 2 controls (arrow keys + Shift)
+    if (keyCode == UP) {
+      p2Up = true;
+      player2Direction = "up";
+    }
+    if (keyCode == DOWN) {
+      p2Down = true;
+      player2Direction = "down";
+    }
+    if (keyCode == LEFT) {
+      p2Left = true;
+      player2Direction = "left";
+    }
+    if (keyCode == RIGHT) {
+      p2Right = true;
+      player2Direction = "right";
+    }
+    if (keyCode == SHIFT) {
+      placeBomb(2); // Player 2 places a bomb
+    }
+  }
+}
+
+// Key release event
+void keyReleased() {
+  if (characterSelectionDone) {
+    // Player 1 (for testing without Arduino)
+    if (key == 'w') p1Up = false;
+    if (key == 's') p1Down = false;
+    if (key == 'a') p1Left = false;
+    if (key == 'd') p1Right = false;
+
+    // Player 2
+    if (keyCode == UP) p2Up = false;
+    if (keyCode == DOWN) p2Down = false;
+    if (keyCode == LEFT) p2Left = false;
+    if (keyCode == RIGHT) p2Right = false;
+  }
+}
+
+// Initialize player attributes based on selected characters
+void initializePlayerAttributes() {
+  // Set Player 1 attributes
+  player1Speed = characterSpeeds[selectedCharacterP1];
+  player1BombPower = characterBombPowers[selectedCharacterP1];
+  player1UpGif = characterGifs[selectedCharacterP1][0];
+  player1DownGif = characterGifs[selectedCharacterP1][1];
+  player1LeftGif = characterGifs[selectedCharacterP1][2];
+  player1RightGif = characterGifs[selectedCharacterP1][3];
+  player1IdleGif = characterGifs[selectedCharacterP1][4];
+
+  player1UpGif.play();
+  player1DownGif.play();
+  player1LeftGif.play();
+  player1RightGif.play();
+  player1IdleGif.play();
+
+  // Set Player 2 attributes
+  player2Speed = characterSpeeds[selectedCharacterP2];
+  player2BombPower = characterBombPowers[selectedCharacterP2];
+  player2UpGif = characterGifs[selectedCharacterP2][0];
+  player2DownGif = characterGifs[selectedCharacterP2][1];
+  player2LeftGif = characterGifs[selectedCharacterP2][2];
+  player2RightGif = characterGifs[selectedCharacterP2][3];
+  player2IdleGif = characterGifs[selectedCharacterP2][4];
+
+  player2UpGif.play();
+  player2DownGif.play();
+  player2LeftGif.play();
+  player2RightGif.play();
+  player2IdleGif.play();
+}
+
+void drawGame() {
+  // Draw blocks
+  for (Block block : blocks) {
+    if (!block.destroyed) {
+      block.display();
+    }
+  }
+
+  // Draw stars
+  for (Star star : stars) {
+    star.display();
+  }
+
+  // Draw speed shoes
+  for (SpeedShoes shoes : speedShoesList) {
+    shoes.display();
+  }
+
+  // Draw bombs
+  for (int i = bombs.size() - 1; i >= 0; i--) {
+    Bomb b = bombs.get(i);
+    b.update();
+    b.display();
+
+    // Check if bomb is finished
+    if (b.isFinished()) {
+      bombs.remove(i);
+      // Restore player's bomb count
+      if (b.owner == 1) {
+        player1BombsAvailable = min(player1BombsAvailable + 1, 3);
+      } else if (b.owner == 2) {
+        player2BombsAvailable = min(player2BombsAvailable + 1, 3);
+      }
+    }
+  }
+
+  // Draw Player 1
+  if (!player1Dead) {
+    Gif currentGif;
+    switch (player1Direction) {
+      case "up":
+        currentGif = player1UpGif;
+        break;
+      case "down":
+        currentGif = player1DownGif;
+        break;
+      case "left":
+        currentGif = player1LeftGif;
+        break;
+      case "right":
+        currentGif = player1RightGif;
+        break;
+      default:
+        currentGif = player1IdleGif;
+        break;
+    }
+    image(currentGif, player1X - playerSize / 2, player1Y - playerSize / 2, playerSize*1.2, playerSize*1.2);
+  }
+
+  // Draw Player 2
+  if (!player2Dead) {
+    Gif currentGif;
+    switch (player2Direction) {
+      case "up":
+        currentGif = player2UpGif;
+        break;
+      case "down":
+        currentGif = player2DownGif;
+        break;
+      case "left":
+        currentGif = player2LeftGif;
+        break;
+      case "right":
+        currentGif = player2RightGif;
+        break;
+      default:
+        currentGif = player2IdleGif;
+        break;
+    }
+    image(currentGif, player2X - playerSize / 2, player2Y - playerSize / 2, playerSize*1.2, playerSize*1.2);
+  }
+
+  // Check bomb effects on players
+  for (Bomb b : bombs) {
+    if (b.exploded) {
+      if (b.isPlayerHit(player1X, player1Y) && !player1Dead) {
+        winner = "Player 2"; // Player 1 is hit, Player 2 wins
+        player1Dead = true;
+        gameOver = true;
+        handleWin();
+      }
+      if (b.isPlayerHit(player2X, player2Y) && !player2Dead) {
+        winner = "Player 1"; // Player 2 is hit, Player 1 wins
+        player2Dead = true;
+        gameOver = true;
+        handleWin();
+      }
+    }
+  }
+
+  // Constrain player movement within the screen
+  player1X = constrain(player1X, playerSize / 2, width - playerSize / 2);
+  player1Y = constrain(player1Y, playerSize / 2, height - playerSize / 2);
+  player2X = constrain(player2X, playerSize / 2, width - playerSize / 2);
+  player2Y = constrain(player2Y, playerSize / 2, height - playerSize / 2);
+}
+
+// Handle victory music
+void handleWin() {
+  bgMusic.pause(); // Pause background music
+  winMusic.rewind();
+  winMusic.play(); // Play victory music
+}
+
+// Draw death animation
+void drawDeathAnimation() {
+  if (player1Dead) {
+    tint(255, 100); // Set transparency
+    image(player1DownGif, player1X - playerSize / 2, player1Y - playerSize / 2, playerSize, playerSize);
+    noTint(); // Reset transparency
+  }
+  if (player2Dead) {
+    tint(255, 100);
+    image(player2DownGif, player2X - playerSize / 2, player2Y - playerSize / 2, playerSize, playerSize);
+    noTint();
+  }
+}
+
+// Draw start button
+void drawStartButton() {
+  fill(0, 200, 0);
+  rect(width / 2 - 50, height / 2 - 25, 100, 50);
+  fill(255);
+  textSize(20);
+  textAlign(CENTER, CENTER);
+  text("Start", width / 2, height / 2);
+}
+
+// Draw restart button
+void drawRestartButton() {
+  fill(200, 0, 0);
+  rect(width / 2 - 50, height / 2 + 50, 100, 50);
+  fill(255);
+  textSize(20);
+  textAlign(CENTER, CENTER);
+  text("Restart", width / 2, height / 2 + 75);
+}
+
+// Reset the game
+void resetGame() {
+  gameStarted = true;
+  gameOver = false;
+  winner = "";
+  bombs.clear();
+  stars.clear();
+  speedShoesList.clear();
+  initStars();   // Re-initialize stars
+  initBlocks();  // Re-initialize blocks
+  initSpeedShoes(); // Re-initialize speed shoes
+  player1X = 100;
+  player1Y = 100;
+  player2X = 700;
+  player2Y = 500;
+  player1BombPower = characterBombPowers[selectedCharacterP1]; // Reset Player 1's bomb power
+  player2BombPower = characterBombPowers[selectedCharacterP2]; // Reset Player 2's bomb power
+  player1Speed = characterSpeeds[selectedCharacterP1];     // Reset Player 1's speed
+  player2Speed = characterSpeeds[selectedCharacterP2];     // Reset Player 2's speed
+  player1BombsAvailable = 3; // Reset Player 1's bomb count
+  player2BombsAvailable = 3; // Reset Player 2's bomb count
+  player1Dead = false;
+  player2Dead = false;
+  gameOverDelay = 180; // Reset game over delay
+  player1Direction = "down"; // Reset player directions
+  player2Direction = "down";
+  bgMusic.rewind();
+  bgMusic.loop(); // Replay background music
+  winMusic.pause(); // Stop victory music
 }
 
 // Handle input from Arduino
@@ -397,264 +784,6 @@ void checkSpeedShoesCollisions() {
   }
 }
 
-// Draw the game scene
-void drawGame() {
-  // Draw blocks
-  for (Block block : blocks) {
-    if (!block.destroyed) {
-      block.display();
-    }
-  }
-
-  // Draw stars
-  for (Star star : stars) {
-    star.display();
-  }
-
-  // Draw speed shoes
-  for (SpeedShoes shoes : speedShoesList) {
-    shoes.display();
-  }
-
-  // Draw bombs
-  for (int i = bombs.size() - 1; i >= 0; i--) {
-    Bomb b = bombs.get(i);
-    b.update();
-    b.display();
-
-    // Check if bomb is finished
-    if (b.isFinished()) {
-      bombs.remove(i);
-      // Restore player's bomb count
-      if (b.owner == 1) {
-        player1BombsAvailable = min(player1BombsAvailable + 1, 3);
-      } else if (b.owner == 2) {
-        player2BombsAvailable = min(player2BombsAvailable + 1, 3);
-      }
-    }
-  }
-
-  // Draw Player 1
-  if (!player1Dead) {
-    Gif currentGif;
-    switch (player1Direction) {
-      case "up":
-        currentGif = player1UpGif;
-        break;
-      case "down":
-        currentGif = player1DownGif;
-        break;
-      case "left":
-        currentGif = player1LeftGif;
-        break;
-      case "right":
-        currentGif = player1RightGif;
-        break;
-      default:
-        currentGif = player1IdleGif;
-        break;
-    }
-    image(currentGif, player1X - playerSize / 2, player1Y - playerSize / 2, playerSize, playerSize);
-  }
-
-  // Draw Player 2
-  if (!player2Dead) {
-    Gif currentGif;
-    switch (player2Direction) {
-      case "up":
-        currentGif = player2UpGif;
-        break;
-      case "down":
-        currentGif = player2DownGif;
-        break;
-      case "left":
-        currentGif = player2LeftGif;
-        break;
-      case "right":
-        currentGif = player2RightGif;
-        break;
-      default:
-        currentGif = player2IdleGif;
-        break;
-    }
-    image(currentGif, player2X - playerSize / 2, player2Y - playerSize / 2, playerSize, playerSize);
-  }
-
-  // Check bomb effects on players
-  for (Bomb b : bombs) {
-    if (b.exploded) {
-      if (b.isPlayerHit(player1X, player1Y) && !player1Dead) {
-        winner = "Player 2"; // Player 1 is hit, Player 2 wins
-        player1Dead = true;
-        gameOver = true;
-        handleWin();
-      }
-      if (b.isPlayerHit(player2X, player2Y) && !player2Dead) {
-        winner = "Player 1"; // Player 2 is hit, Player 1 wins
-        player2Dead = true;
-        gameOver = true;
-        handleWin();
-      }
-    }
-  }
-
-  // Constrain player movement within the screen
-  player1X = constrain(player1X, playerSize / 2, width - playerSize / 2);
-  player1Y = constrain(player1Y, playerSize / 2, height - playerSize / 2);
-  player2X = constrain(player2X, playerSize / 2, width - playerSize / 2);
-  player2Y = constrain(player2Y, playerSize / 2, height - playerSize / 2);
-}
-
-// Handle victory music
-void handleWin() {
-  bgMusic.pause(); // Pause background music
-  winMusic.rewind();
-  winMusic.play(); // Play victory music
-}
-
-// Draw death animation
-void drawDeathAnimation() {
-  if (player1Dead) {
-    tint(255, 100); // Set transparency
-    image(player1DownGif, player1X - playerSize / 2, player1Y - playerSize / 2, playerSize, playerSize);
-    noTint(); // Reset transparency
-  }
-  if (player2Dead) {
-    tint(255, 100);
-    image(player2DownGif, player2X - playerSize / 2, player2Y - playerSize / 2, playerSize, playerSize);
-    noTint();
-  }
-}
-
-// Draw start button
-void drawStartButton() {
-  fill(0, 200, 0);
-  rect(width / 2 - 50, height / 2 - 25, 100, 50);
-  fill(255);
-  textSize(20);
-  textAlign(CENTER, CENTER);
-  text("Start", width / 2, height / 2);
-}
-
-// Draw restart button
-void drawRestartButton() {
-  fill(200, 0, 0);
-  rect(width / 2 - 50, height / 2 + 50, 100, 50);
-  fill(255);
-  textSize(20);
-  textAlign(CENTER, CENTER);
-  text("Restart", width / 2, height / 2 + 75);
-}
-
-// Mouse click event
-void mousePressed() {
-  if (!gameStarted) {
-    // Click start button
-    if (mouseX > width / 2 - 50 && mouseX < width / 2 + 50 && mouseY > height / 2 - 25 && mouseY < height / 2 + 25) {
-      gameStarted = true;
-      gameOver = false;
-      startMusic.rewind();
-      startMusic.play(); // Play start music
-    }
-  } else if (gameOver && gameOverDelay <= 0) {
-    // Click restart button
-    if (mouseX > width / 2 - 50 && mouseX < width / 2 + 50 && mouseY > height / 2 + 50 && mouseY < height / 2 + 100) {
-      resetGame();
-    }
-  }
-}
-
-// Reset the game
-void resetGame() {
-  gameStarted = true;
-  gameOver = false;
-  winner = "";
-  bombs.clear();
-  stars.clear();
-  speedShoesList.clear();
-  initStars();   // Re-initialize stars
-  initBlocks();  // Re-initialize blocks
-  initSpeedShoes(); // Re-initialize speed shoes
-  player1X = 100;
-  player1Y = 100;
-  player2X = 700;
-  player2Y = 500;
-  player1BombPower = 1; // Reset Player 1's bomb power
-  player2BombPower = 1; // Reset Player 2's bomb power
-  player1Speed = 2;     // Reset Player 1's speed
-  player2Speed = 2;     // Reset Player 2's speed
-  player1BombsAvailable = 3; // Reset Player 1's bomb count
-  player2BombsAvailable = 3; // Reset Player 2's bomb count
-  player1Dead = false;
-  player2Dead = false;
-  gameOverDelay = 180; // Reset game over delay
-  player1Direction = "down"; // Reset player directions
-  player2Direction = "down";
-  bgMusic.rewind();
-  bgMusic.loop(); // Replay background music
-  winMusic.pause(); // Stop victory music
-}
-
-// Key press event
-void keyPressed() {
-  // Player 1 controls (for testing without Arduino)
-  if (key == 'w') {
-    p1Up = true;
-    player1Direction = "up";
-  }
-  if (key == 's') {
-    p1Down = true;
-    player1Direction = "down";
-  }
-  if (key == 'a') {
-    p1Left = true;
-    player1Direction = "left";
-  }
-  if (key == 'd') {
-    p1Right = true;
-    player1Direction = "right";
-  }
-  if (key == 'f') {
-    placeBomb(1); // Player 1 places a bomb
-  }
-
-  // Player 2 controls (arrow keys + Enter)
-  if (keyCode == UP) {
-    p2Up = true;
-    player2Direction = "up";
-  }
-  if (keyCode == DOWN) {
-    p2Down = true;
-    player2Direction = "down";
-  }
-  if (keyCode == LEFT) {
-    p2Left = true;
-    player2Direction = "left";
-  }
-  if (keyCode == RIGHT) {
-    p2Right = true;
-    player2Direction = "right";
-  }
-  if (keyCode == ENTER) {
-    placeBomb(2); // Player 2 places a bomb
-  }
-}
-
-// Key release event
-void keyReleased() {
-  // Player 1 (for testing without Arduino)
-  if (key == 'w') p1Up = false;
-  if (key == 's') p1Down = false;
-  if (key == 'a') p1Left = false;
-  if (key == 'd') p1Right = false;
-
-  // Player 2
-  if (keyCode == UP) p2Up = false;
-  if (keyCode == DOWN) p2Down = false;
-  if (keyCode == LEFT) p2Left = false;
-  if (keyCode == RIGHT) p2Right = false;
-}
-
 // Function to place a bomb
 void placeBomb(int player) {
   if (player == 1 && player1BombsAvailable > 0) {
@@ -705,7 +834,7 @@ class Bomb {
 
   void display() {
     if (!exploded) {
-      image(bombGif, x - tileSize / 2, y - tileSize / 2, tileSize, tileSize);
+      image(bombGif, x - tileSize / 2, y - tileSize / 2, tileSize*1.5, tileSize*1.5);
     } else {
       for (Explosion exp : explosions) {
         exp.display();
